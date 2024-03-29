@@ -2,15 +2,12 @@
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
-from bs4 import BeautifulSoup
 import time
 import logging
-import re
 import requests
-import json
-
+import toml
 import os
-
+from os.path import abspath, join, dirname
 from error import ChannelNameInputError, HTMLParsingError
 
 class Downloader:
@@ -18,18 +15,19 @@ class Downloader:
 
     def __init__(self, log_level=logging.FATAL) -> None:
         logging.basicConfig(level=log_level)
+        src_dir = abspath(dirname(__file__))
+        self.config = toml.load(join(src_dir, 'config.toml'))
         self.chrome_options = Options()
         self.chrome_options.add_argument("--headless")
         self.chrome_options.add_argument('--log-level=3')
 
-    def download(self, channel_name: str = None, range: str = '7d', path = os.getcwd()) -> None:
+    def download(self, channel_name: str = None, content_type:str = 'clips', range: str = '7d', path = os.getcwd()) -> None:
         if channel_name == None:
             raise ChannelNameInputError('Channel name must not be empty')
         
-        url = f'https://www.twitch.tv/{channel_name}/clips?filter=clips&range={range}'
+        url = f'{self.config['path']['main']}{channel_name}/{self.config['path'][content_type]}range={range}'
 
-        html_content = self.get_html(url=url)
-        urls = self.get_urls_from_json(self.extract_json(html_content=html_content))
+        urls = self.get_urls(url=url,content_type=content_type)
         src = self.get_clips_src(urls)
 
         for source in src:
@@ -37,7 +35,6 @@ class Downloader:
 
     def get_clips_src(self, urls):
         driver = webdriver.Chrome(options=self.chrome_options)
-
         src = []
         for url in urls:
             try:
@@ -50,40 +47,19 @@ class Downloader:
         
         return src
 
-    def get_html(self, url: str = None):
-        try:
-            driver = webdriver.Chrome(options=self.chrome_options)
-            driver.get(url)
-            time.sleep(1)
-            html_content = driver.page_source
-            
-            driver.quit()
-            return html_content
-        except Exception as e:
-            logging.error(f"Unexpected error: {e}")
-            return None
+    def get_urls(self, url: str = None, content_type:str = 'clips'):
+        driver = webdriver.Chrome(options=self.chrome_options)
+        driver.get(url)
+        time.sleep(1)
+        element = driver.find_element(By.CLASS_NAME, "tw-tower")
+        divs = element.find_elements(By.CLASS_NAME, "tw-link")
 
-    def extract_json(self, html_content:str):
-        soup = BeautifulSoup(html_content, 'html.parser')
-        json_data = None
-
-        script_tags = soup.find_all('script')
-        for script_tag in script_tags:
-            if 'itemListElement' in script_tag.text:
-                json_data = json.loads(script_tag.text)
-                break
-        
-        if json_data == None:
-            raise HTMLParsingError('Something wrong with html content, please try again')
-        
-        return json_data
-    
-    def get_urls_from_json(self, json_data):
-        urls = []
-        for item in json_data[1]['itemListElement']:
-            if 'url' in item:
-                urls.append(item['url'])
-        return urls
+        hrefs = []
+        for div in divs:
+            href = div.get_attribute('href')
+            if content_type[:-1] in href:
+                hrefs.append(href)
+        return list(set(hrefs))
     
     def download_clip(self, src: str, path: str):
         try:
@@ -97,7 +73,3 @@ class Downloader:
                 logging.error("Video download error. Status code: %d", response.status_code)
         except Exception as e:
             logging.error("Unexpected: %s", e)
-
-downloader = Downloader(log_level=logging.ERROR) 
-
-downloader.download(channel_name='cs2_maincast')

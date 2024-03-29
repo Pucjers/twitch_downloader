@@ -1,0 +1,14 @@
+[path]
+main = "https://www.twitch.tv/"
+videos = "videos?filter=all&sort=time"
+collections = "videos?filter=collections"
+uploads = "videos?filter=uploads&sort=time"
+broadcasts = "videos?filter=archives"
+highlights = "videos?filter=highlights"
+clips = "clips?filter=clips&"
+
+[range]
+day = "24hr"
+week = "7d"
+mounth = "30d"
+all = "all"
