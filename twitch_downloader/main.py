@@ -1,9 +1,10 @@
-import fake_useragent
+
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from bs4 import BeautifulSoup
 import time
+import logging
 import re
 import requests
 import json
@@ -15,12 +16,11 @@ from error import ChannelNameInputError, HTMLParsingError
 class Downloader:
     counter = 0
 
-    def __init__(self, user_agent :str = None) -> None:
-        
-        if user_agent == None:
-            self.user_agent = fake_useragent.FakeUserAgent().random
-        else:
-            self.user_agent = user_agent
+    def __init__(self, log_level=logging.FATAL) -> None:
+        logging.basicConfig(level=log_level)
+        self.chrome_options = Options()
+        self.chrome_options.add_argument("--headless")
+        self.chrome_options.add_argument('--log-level=3')
 
     def download(self, channel_name: str = None, range: str = '7d', path = os.getcwd()) -> None:
         if channel_name == None:
@@ -30,26 +30,37 @@ class Downloader:
 
         html_content = self.get_html(url=url)
         urls = self.get_urls_from_json(self.extract_json(html_content=html_content))
-        
-        for i in urls:
-            self.download_clip(url=i, path=path)
+        src = self.get_clips_src(urls)
 
-    def get_html(self, url: str = None, clp:bool=False):
-        try:
-            chrome_options = Options()
-            chrome_options.add_argument("--headless")
-            driver = webdriver.Chrome(options=chrome_options)
-            driver.get(url)
-            if clp:
+        for source in src:
+            self.download_clip(source, path=path)
+
+    def get_clips_src(self, urls):
+        driver = webdriver.Chrome(options=self.chrome_options)
+
+        src = []
+        for url in urls:
+            try:
+                driver.get(url)
                 time.sleep(1)
                 video_element = driver.find_element(By.TAG_NAME, 'video')
-                return video_element.get_attribute('src')
+                src.append(video_element.get_attribute('src'))
+            except Exception as e:
+                logging.error(f'Unexpected error on {url}: {e}')
+        
+        return src
+
+    def get_html(self, url: str = None):
+        try:
+            driver = webdriver.Chrome(options=self.chrome_options)
+            driver.get(url)
+            time.sleep(1)
             html_content = driver.page_source
             
             driver.quit()
             return html_content
         except Exception as e:
-            print("Unexpected error:", e)
+            logging.error(f"Unexpected error: {e}")
             return None
 
     def extract_json(self, html_content:str):
@@ -74,8 +85,7 @@ class Downloader:
                 urls.append(item['url'])
         return urls
     
-    def download_clip(self, url: str, path: str):
-        src = self.get_html(url=url,clp=True)
+    def download_clip(self, src: str, path: str):
         try:
             response = requests.get(src, stream=True)
             if response.status_code == 200:
@@ -84,10 +94,10 @@ class Downloader:
                         f.write(chunk)
                 Downloader.counter +=1
             else:
-                print("Video upload error. Status code:", response.status_code)
+                logging.error("Video download error. Status code: %d", response.status_code)
         except Exception as e:
-            print("Unexpected:", e)
+            logging.error("Unexpected: %s", e)
 
-d = Downloader()
+downloader = Downloader(log_level=logging.ERROR) 
 
-d.download(channel_name='cs2_maincast')
+downloader.download(channel_name='cs2_maincast')

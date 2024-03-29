@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='twitch_downloader',
-    version='0.1',
+    version='0.1.1',
     packages=find_packages(),
     install_requires=[
         'appdirs==1.4.4',
@@ -14,7 +14,6 @@ setup(
         'charset-normalizer==3.3.2',
         'colorama==0.4.6',
         'cssselect==1.2.0',
-        'fake-useragent==1.5.1',
         'h11==0.14.0',
         'idna==3.6',
         'importlib_metadata==7.1.0',
